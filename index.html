@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>TLE At-Store Hub</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one phone-width column. A shift ticket on top, then the demo as five timed stages that open one at a time. */
+:root{
+  --bg:#F8F4F7; --surface:#FFFFFF; --sunk:#F1EAF0; --ink:#1D1520; --muted:#6A5D6E; --line:#E3D8E1;
+  --accent:#B0127B; --accent-ink:#FFFFFF; --accent-soft:#FBE6F3;
+  --good:#1C7A4C; --good-soft:#DFF3E8; --warn:#8A5A00; --warn-soft:#FBEFD2;
+  --display:"Space Grotesk","Avenir Next","Segoe UI",sans-serif;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141015; --surface:#1F1821; --sunk:#2A212C; --ink:#F4ECF2; --muted:#AA9CAD; --line:#3A2F3C;
+  --accent:#F062BC; --accent-ink:#1D0A16; --accent-soft:#3B1730;
+  --good:#58C990; --good-soft:#163526; --warn:#E9B949; --warn-soft:#3A2D0D; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141015; --surface:#1F1821; --sunk:#2A212C; --ink:#F4ECF2; --muted:#AA9CAD; --line:#3A2F3C;
+  --accent:#F062BC; --accent-ink:#1D0A16; --accent-soft:#3B1730;
+  --good:#58C990; --good-soft:#163526; --warn:#E9B949; --warn-soft:#3A2D0D; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5}
+.wrap{max-width:540px;margin:0 auto;padding-block:16px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.2}
+p{margin:0}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.proto{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:500}
+.brand{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.brand b{font-family:var(--display);font-size:15px;letter-spacing:.02em}
+.brand b i{font-style:normal;color:var(--accent)}
+.brand span{font-size:13px;color:var(--muted)}
+
+.ticket{background:var(--ink);color:var(--bg);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:12px}
+.ticket .eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;opacity:.75}
+.ticket h1{font-size:24px}
+.ticket dl{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:0}
+.ticket dt{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.65}
+.ticket dd{margin:0;font-weight:600;font-size:15px}
+.bar{height:8px;border-radius:99px;background:color-mix(in srgb,var(--bg) 22%,transparent);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:99px;transition:width .3s}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+.barrow{display:flex;justify-content:space-between;font-size:13px;opacity:.85}
+
+.coach{font-size:15px;color:var(--muted)}
+.coach b{color:var(--ink)}
+
+details.stage{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+details.stage>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;align-items:center;gap:10px}
+details.stage>summary::-webkit-details-marker{display:none}
+.when{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.stitle{flex:1;min-width:0}
+.stitle h2{font-size:18px}
+.chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;background:var(--sunk);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.chip.done{background:var(--good-soft);color:var(--good)}
+.chip.part{background:var(--accent-soft);color:var(--accent)}
+.sbody{padding:2px 16px 18px;display:flex;flex-direction:column;gap:16px;border-top:1px solid var(--line);padding-top:16px}
+
+.btn{font:600 16px var(--body);border:0;border-radius:12px;padding:14px 16px;background:var(--accent);color:var(--accent-ink);cursor:pointer;width:100%}
+.btn.ghost{background:var(--sunk);color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:default}
+.stamp{display:flex;gap:10px;align-items:center;background:var(--good-soft);color:var(--good);border-radius:12px;padding:12px 14px;font-weight:600}
+.note{font-size:13px;color:var(--muted)}
+
+.slot{border:1px dashed var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.slot.ok{border-style:solid;border-color:var(--good)}
+.slot header{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.slot h3{font-size:15px}
+.count{font-size:12px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.slot.ok .count{color:var(--good)}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.thumbs img{width:64px;height:64px;object-fit:cover;border-radius:8px}
+.add{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-weight:600;font-size:15px;padding:11px 14px;border-radius:10px;background:var(--accent-soft);color:var(--accent);cursor:pointer}
+.add:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+
+.prod{background:var(--sunk);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.prod h3{font-size:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.f>span,.seg>legend{font-size:13px;font-weight:500;color:var(--muted);padding:0}
+input[type=text],input[type=number],textarea{font:16px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+textarea{min-height:76px;resize:vertical}
+.seg{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.seg .opts{display:flex;flex-wrap:wrap;gap:6px}
+.seg label{position:relative}
+.seg input{position:absolute;opacity:0;inset:0}
+.seg label span{display:block;padding:9px 13px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:14px;font-weight:500;cursor:pointer}
+.seg input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+
+.tally{display:flex;align-items:center;gap:12px;background:var(--sunk);border-radius:12px;padding:12px}
+.tally output{font:700 34px var(--display);min-width:2ch;text-align:center;font-variant-numeric:tabular-nums}
+.tally .lbl{flex:1;font-size:14px;color:var(--muted);min-width:0}
+.tally button{font:700 22px var(--display);width:52px;height:52px;border-radius:12px;border:0;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+.tally button.minus{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+
+canvas.sig{width:100%;height:140px;background:var(--surface);border:1px solid var(--line);border-radius:10px;touch-action:none;display:block}
+.sigrow{display:flex;justify-content:space-between;align-items:center}
+.link{background:none;border:0;color:var(--accent);font:600 14px var(--body);cursor:pointer;padding:4px 0}
+
+details.help{border-radius:12px;background:var(--sunk);padding:0 12px}
+details.help>summary{cursor:pointer;padding:12px 0;font-weight:600;font-size:14px}
+details.help dl{margin:0 0 12px;display:flex;flex-direction:column;gap:10px}
+details.help dt{font-weight:600;font-size:14px}
+details.help dd{margin:2px 0 0;font-size:14px;color:var(--muted)}
+
+.send{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
+.send h2{font-size:18px}
+.missing{margin:0;padding-left:18px;font-size:14px;color:var(--muted)}
+.route{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.route li{display:flex;gap:8px}
+.route b{min-width:108px}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><b>the <i>Lynne</i> experience</b><span>At-store hub</span></div>
+  <p class="proto">Prototype. Nothing you enter here is sent anywhere yet.</p>
+
+  <section class="ticket" aria-label="Your shift">
+    <span class="eyebrow">Today's demo</span>
+    <h1>RYZE Mushroom Coffee</h1>
+    <dl>
+      <div><dt>Store</dt><dd>Ralph's Burbank #648</dd></div>
+      <div><dt>When</dt><dd>Sun Nov 15, 2:00–6:00 PM</dd></div>
+    </dl>
+    <div>
+      <div class="barrow"><span id="barText">0 of 0 done</span><span id="barNext"></span></div>
+      <div class="bar" role="progressbar" aria-labelledby="barText"><i id="barFill"></i></div>
+    </div>
+  </section>
+
+  <p class="coach" id="coach"></p>
+  <main id="stages" style="display:flex;flex-direction:column;gap:12px"></main>
+
+  <section class="send" aria-label="Send to TLE">
+    <h2>Send to TLE</h2>
+    <p class="note" id="sendNote"></p>
+    <ul class="missing" id="missing"></ul>
+    <button class="btn" id="sendBtn" type="button">Send my demo to TLE</button>
+    <div id="sent" hidden>
+      <p class="stamp">Prototype: nothing was sent.</p>
+      <p class="note" style="margin-top:10px">In the live hub, this tap would deliver everything for you:</p>
+      <ul class="route" style="margin-top:8px">
+        <li><b>Photos</b><span>to this shift's folder, then to the matching photo slot in the reporting system</span></li>
+        <li><b>Receipt</b><span>photo and total, to the same shift for reimbursement</span></li>
+        <li><b>Report</b><span>counts, answers and the manager's signature, filed for this shift</span></li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+const PRODUCTS=[
+  {id:'sticks',name:'Organic Mushroom Coffee Medium Roast Sticks'},
+  {id:'dark',name:'Mushroom Coffee Dark Roast Bag'},
+  {id:'latte',name:'Mushroom Coffee Latte Cashew Vanilla Sticks'}];
+const SLOTS={
+  front:{n:1,title:'In front of the store',tip:'Stand back far enough that the store sign is readable behind you.'},
+  tableNo:{n:1,title:'Table display, without you',tip:'Whole table in frame, product labels facing the camera.'},
+  tableBA:{n:1,title:'Table display, with you',tip:'Stand beside the table, not in front of it. Ask an associate to take it.'},
+  shoppers:{n:3,title:'Shoppers getting samples',tip:'Shopper holding the product with the label facing forward, in front of your table. Ask before you take it.'},
+  receipt:{n:1,title:'Purchase receipt',tip:'Lay it flat. Store name, date, items and total must all be readable.'}};
+const ARRIVE_F=[['countIn','Units on shelf','num'],['oosIn','Out of stock?','yn'],['regPrice','Regular price $','num'],['promoPrice','Promo price $','num'],['display','On a display?','yn']];
+const END_F=[['samples','Samples given','num'],['sales','Units sold','num'],['countOut','Units left on shelf','num'],['ranOut','Ran out of stock?','yn'],['bought','Units you bought for sampling','num']];
+const HELP={
+  arrive:[['The manager is not expecting me','Show them your shift details at the top of this page. If they still say no, do not set up. Contact your TLE coordinator before you leave the store.'],
+          ['I am running late','Check in as soon as you arrive and tell your TLE coordinator your new arrival time.']],
+  setup:[['I cannot find the product','Ask at customer service for the grocery or coffee lead. If it is out of stock, mark "Out of stock" below and contact your TLE coordinator before buying anything else.'],
+         ['There is no table or space for me','Ask the manager where demos usually go. Take a photo of the spot they give you, even if it is small.']],
+  during:[['A shopper does not want to be photographed','That is fine. Photograph hands holding the product, or wait for the next shopper.'],
+          ['I am running low on samples','Note the time. You will record "Ran out of stock" in the wrap-up step.']],
+  wrap:[['I lost the receipt','Ask customer service to reprint it. Most registers can within the same day.'],
+        ['The shelf count looks wrong','Count again and enter what you see. Add a line in the comments if something seems off.']],
+  report:[['The manager is busy or gone','Ask the manager on duty or a department lead to sign instead, and write their name and title.'],
+          ['The manager will not sign','Write their name and "declined to sign" in the comments box. Do not sign for them.']]};
+
+let S={}; try{S=JSON.parse(localStorage.getItem('tleHubDraft')||'{}')}catch(e){}
+const photos={front:[],tableNo:[],tableBA:[],shoppers:[],receipt:[]};
+let signed=false;
+const save=()=>{try{localStorage.setItem('tleHubDraft',JSON.stringify(S))}catch(e){}};
+const has=k=>S[k]!==undefined&&S[k]!==null&&String(S[k]).trim()!=='';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const val=k=>has(k)?esc(S[k]):'';
+
+const num=(k,label)=>`<label class="f"><span>${label}</span><input type="text" inputmode="decimal" id="f-${k}" data-k="${k}" value="${val(k)}"></label>`;
+const text=(k,label)=>`<label class="f"><span>${label}</span><input type="text" id="f-${k}" data-k="${k}" value="${val(k)}"></label>`;
+const seg=(k,label,opts)=>`<fieldset class="seg"><legend>${label}</legend><div class="opts">${opts.map((o,i)=>`<label><input type="radio" name="${k}" id="f-${k}-${i}" value="${esc(o)}" ${S[k]===o?'checked':''}><span>${esc(o)}</span></label>`).join('')}</div></fieldset>`;
+const slot=id=>`<div class="slot" id="slot-${id}"><header><h3>${SLOTS[id].title}</h3><span class="count" id="cnt-${id}"></span></header>
+  <p class="note">${SLOTS[id].tip}</p><div class="thumbs" id="th-${id}"></div>
+  <label class="add">Add photo<input class="vh" type="file" accept="image/*" multiple id="file-${id}" data-slot="${id}"></label></div>`;
+const prodBlock=(fields,sfx)=>PRODUCTS.map(p=>`<div class="prod"><h3>${p.name}</h3><div class="grid">${fields.map(([k,l,t])=>t==='yn'?seg(p.id+'_'+k,l,['Yes','No']):num(p.id+'_'+k,l)).join('')}</div></div>`).join('');
+const help=id=>`<details class="help"><summary>Something not going to plan?</summary><dl>${HELP[id].map(([q,a])=>`<div><dt>${q}</dt><dd>${a}</dd></div>`).join('')}
+  <div><dt>Still stuck?</dt><dd>Contact your TLE coordinator. Their number will show here in the live hub.</dd></div></dl></details>`;
+
+const STAGES=[
+ {id:'arrive',when:'On arrival',title:'Check in',coach:'Start here when you walk up to the store.',
+  body:()=>`<div id="checkin"></div><p class="note">The live hub will also record where you are, so this is the only check-in you do.</p>${slot('front')}${help('arrive')}`,
+  need:()=>[['Check in',has('checkin')],['Photo in front of the store',photos.front.length>=1]]},
+ {id:'setup',when:'Before you start',title:'Set up your table',coach:'Find the product, note what is on the shelf, then build your table.',
+  body:()=>`<p class="note">Check the shelf before you buy anything. These numbers are easier to get now than at the end.</p>${prodBlock(ARRIVE_F)}${slot('tableNo')}${slot('tableBA')}${help('setup')}`,
+  need:()=>[...PRODUCTS.flatMap(p=>ARRIVE_F.map(([k,l])=>[`${l.replace(' $','')}: ${p.name}`,has(p.id+'_'+k)])),['Table photo without you',photos.tableNo.length>=1],['Table photo with you',photos.tableBA.length>=1]]},
+ {id:'during',when:'During the demo',title:'Talk, sample, snap',coach:'Tap the counter each time you talk to a shopper. Grab your three shopper photos early.',
+  body:()=>`<div class="tally"><span class="lbl">Shoppers you have talked to about RYZE</span><button type="button" class="minus" id="tMinus" aria-label="Take one off">−</button><output id="tOut">0</output><button type="button" id="tPlus" aria-label="Add one shopper">+</button></div>
+   ${slot('shoppers')}<label class="f"><span>Things shoppers said (optional)</span><textarea id="f-comments" data-k="comments">${val('comments')}</textarea></label>${help('during')}`,
+  need:()=>[['Shoppers talked to',(S.spoke||0)>0],['3 shopper photos',photos.shoppers.length>=3]]},
+ {id:'wrap',when:'Last 15 minutes',title:'Count up and get your receipt',coach:'Count the shelf again, then photograph your receipt before it gets lost.',
+  body:()=>`${prodBlock(END_F)}${slot('receipt')}${num('receiptTotal','Receipt total $')}${help('wrap')}`,
+  need:()=>[...PRODUCTS.flatMap(p=>END_F.map(([k,l])=>[`${l}: ${p.name}`,has(p.id+'_'+k)])),['Receipt photo',photos.receipt.length>=1],['Receipt total',has('receiptTotal')]]},
+ {id:'report',when:'Before you leave',title:'Finish your report',coach:'Five quick questions, then the manager signs on your phone.',
+  body:()=>`${seg('weather','Weather',['Sunny','Cloudy','Rainy','Windy','Snowy/Icy'])}${seg('traffic','Store traffic',['Low','Medium','High'])}
+   ${seg('location','Where was your table?',['End cap','Front of store','Grocery','Produce','Dairy','Bakery/Deli','Meat/Seafood','Frozen','Pharmacy'])}
+   ${seg('attribute','What did shoppers respond to most? Pick one.',['Real coffee + 6 functional mushrooms','Sustained energy, no crash','Effortless upgrade to your daily ritual'])}
+   <label class="f"><span>Store manager comments (optional)</span><textarea id="f-mgrComments" data-k="mgrComments">${val('mgrComments')}</textarea></label>
+   ${text('mgrName','Store manager full name')}
+   <div class="f"><div class="sigrow"><span style="font-size:13px;font-weight:500;color:var(--muted)">Store manager signature</span><button type="button" class="link" id="sigClear">Clear</button></div>
+   <canvas class="sig" id="sig" aria-label="Signature box. Hand the phone to the manager to sign."></canvas></div>${help('report')}`,
+  need:()=>[['Weather',has('weather')],['Store traffic',has('traffic')],['Table location',has('location')],['Top product attribute',has('attribute')],['Manager name',has('mgrName')],['Manager signature',signed]]}
+];
+
+const host=document.getElementById('stages');
+host.innerHTML=STAGES.map(s=>`<details class="stage" id="st-${s.id}"><summary><div class="stitle"><div class="when">${s.when}</div><h2>${s.title}</h2></div><span class="chip" id="chip-${s.id}"></span></summary><div class="sbody">${s.body()}</div></details>`).join('');
+
+function drawCheckin(){
+  const el=document.getElementById('checkin');
+  el.innerHTML=has('checkin')?`<p class="stamp">Checked in at ${esc(S.checkin)}</p>`:`<button class="btn" type="button" id="ciBtn">I'm here. Check me in</button>`;
+}
+function drawSlot(id){
+  const n=photos[id].length,need=SLOTS[id].n;
+  document.getElementById('cnt-'+id).textContent=`${Math.min(n,need)} of ${need}`+(n>need?` (+${n-need})`:'');
+  document.getElementById('slot-'+id).classList.toggle('ok',n>=need);
+  document.getElementById('th-'+id).innerHTML=photos[id].map((u,i)=>`<img src="${u}" alt="${SLOTS[id].title} photo ${i+1}">`).join('');
+}
+function refresh(){
+  let done=0,total=0,next=null;const miss=[];
+  STAGES.forEach(s=>{
+    const list=s.need(),d=list.filter(x=>x[1]).length;
+    done+=d;total+=list.length;
+    const c=document.getElementById('chip-'+s.id);
+    c.textContent=d===list.length?'Done':`${d} of ${list.length}`;
+    c.className='chip'+(d===list.length?' done':d>0?' part':'');
+    if(d<list.length){if(!next)next=s;miss.push(`${s.title}: ${list.length-d} left`)}
+  });
+  document.getElementById('barText').textContent=`${done} of ${total} done`;
+  document.getElementById('barFill').style.width=(total?done/total*100:0)+'%';
+  document.getElementById('barNext').textContent=next?`Next: ${next.title}`:'Ready to send';
+  document.getElementById('coach').innerHTML=next?`<b>${next.when}.</b> ${next.coach}`:'<b>All done.</b> Check it over, then send it to TLE.';
+  document.getElementById('missing').innerHTML=miss.map(m=>`<li>${esc(m)}</li>`).join('');
+  document.getElementById('sendNote').textContent=next?'You can send once every step shows Done. Still to do:':'Everything is in. One tap sends it all.';
+  document.getElementById('sendBtn').disabled=!!next;
+  document.getElementById('tOut').textContent=S.spoke||0;
+  return next;
+}
+
+document.addEventListener('input',e=>{const k=e.target.dataset&&e.target.dataset.k;if(k){S[k]=e.target.value;save();refresh()}});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.type==='radio'){S[t.name]=t.value;save();refresh()}
+  if(t.dataset&&t.dataset.slot){const id=t.dataset.slot;[...t.files].forEach(f=>photos[id].push(URL.createObjectURL(f)));t.value='';drawSlot(id);refresh()}
+});
+document.addEventListener('click',e=>{
+  const id=e.target.id;
+  if(id==='ciBtn'){S.checkin=new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});save();drawCheckin();refresh()}
+  if(id==='tPlus'){S.spoke=(S.spoke||0)+1;save();refresh()}
+  if(id==='tMinus'){S.spoke=Math.max(0,(S.spoke||0)-1);save();refresh()}
+  if(id==='sendBtn'){document.getElementById('sent').hidden=false;e.target.hidden=true}
+  if(id==='sigClear'){sizeSig();signed=false;refresh()}
+});
+
+const sig=document.getElementById('sig'),ctx=sig.getContext('2d');let drawing=false;
+function sizeSig(){const r=sig.getBoundingClientRect(),d=window.devicePixelRatio||1;if(!r.width)return;sig.width=r.width*d;sig.height=r.height*d;ctx.setTransform(d,0,0,d,0,0);ctx.lineWidth=2.2;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=getComputedStyle(document.body).color}
+const pt=e=>{const r=sig.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]};
+sig.addEventListener('pointerdown',e=>{if(!sig.width||sig.width===300)sizeSig();drawing=true;sig.setPointerCapture(e.pointerId);ctx.beginPath();ctx.moveTo(...pt(e))});
+sig.addEventListener('pointermove',e=>{if(!drawing)return;ctx.lineTo(...pt(e));ctx.stroke();if(!signed){signed=true;refresh()}});
+['pointerup','pointercancel'].forEach(n=>sig.addEventListener(n,()=>drawing=false));
+document.getElementById('st-report').addEventListener('toggle',e=>{if(e.target.open&&!signed)sizeSig()});
+
+drawCheckin();Object.keys(SLOTS).forEach(drawSlot);
+const first=refresh();(first?document.getElementById('st-'+first.id):host.firstElementChild).open=true;
+</script>
+</body>
+</html>
