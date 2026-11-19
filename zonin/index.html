@@ -155,6 +155,10 @@ details.help dl{margin:0 0 12px;display:flex;flex-direction:column;gap:10px}
 details.help dt{font-weight:600;font-size:14px}
 details.help dd{margin:2px 0 0;font-size:14px;color:var(--muted)}
 
+.todo{background:var(--warn-soft);border-radius:12px;padding:12px 14px}
+.todo h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--warn);margin-bottom:6px}
+.todo ul{margin:0;padding-left:18px;font-size:15px;font-weight:500;display:flex;flex-direction:column;gap:3px}
+.todo.ok{background:var(--good-soft);color:var(--good);font-weight:600;font-size:15px}
 .send{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
 .send h2{font-size:18px}
 .missing{margin:0;padding-left:18px;font-size:14px;color:var(--muted)}
@@ -224,8 +228,8 @@ details.help dd{margin:2px 0 0;font-size:14px;color:var(--muted)}
 const CAP=48.43;
 const PRODUCTS=[{id:'pros',name:'Zonin Prosecco 187ml'},{id:'rose',name:'Zonin Prosecco Rosé 187ml'}];
 const SLOTS={
-  outside:{n:2,title:'Outside the store',yes:['The H-E-B sign, clearly readable'],no:[]},
-  inside:{n:4,title:'Inside the store, general views',yes:['A wide view of the aisle or department around your table'],no:['A price you can read']},
+  outside:{n:2,title:'Outside the store',yes:['The H-E-B sign, clearly readable'],no:[],shots:['The front of the store with the H-E-B sign','You, with the H-E-B sign behind you']},
+  inside:{n:4,title:'Inside the store, general views',yes:['A wide view of the aisle or department around your table'],no:['A price you can read'],shots:['The aisle or area where your table is','The same area from farther back','The department sign or aisle marker nearest your table','One more wide view of the store near your table']},
   tableNo:{n:1,title:'Your table, without you',yes:['The whole table and black cloth','The acrylic sign and the 21+ sign','Only the 187ml bottles'],no:['A price you can read']},
   tableBA:{n:1,title:'Your table, with you behind it',yes:['You behind the fully set table','The acrylic sign'],no:['A price you can read'],tip:'Ask a store associate to take this one.'},
   shoppers:{n:10,min:6,title:'Shoppers tasting the wine',yes:['The sample cup in their hand','The table sign, whenever you can','Someone you have not photographed yet'],no:['A shopper holding only a bottle','A price you can read'],tip:'Ask before you take it. A different person in every photo.'},
@@ -256,6 +260,7 @@ const val=k=>has(k)?esc(S[k]):'';
 const clock=d=>d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
 const want=id=>S.blocked&&(id==='outside'||id==='inside')?1:SLOTS[id].n;
 const got=id=>photos[id].length>=want(id);
+const ph=(id,label)=>{const left=want(id)-photos[id].length;return[left>0?`${left} more photo${left>1?'s':''}: ${label}`:label,left<=0]};
 
 const num=(k,label)=>`<label class="f"><span>${label}</span><input type="text" inputmode="decimal" id="f-${k}" data-k="${k}" value="${val(k)}"></label>`;
 const text=(k,label)=>`<label class="f"><span>${label}</span><input type="text" id="f-${k}" data-k="${k}" value="${val(k)}"></label>`;
@@ -280,7 +285,7 @@ const NORMAL=[
    <div class="say"><small>Say this to the manager</small><p>"Hi, I'm with Amarko Marketing Solutions. I'm here to sample Zonin Prosecco and Prosecco Rosé today. Where would you like me to set up?"</p></div>
    ${seg('where','Where did they put you?',['Tasting room','Sales floor, with stanchions','Sales floor, no stanchions'])}<p class="alert" id="dryMsg"></p>
    ${help('arrive')}<button class="btn quiet" type="button" id="blockBtn">I cannot run this demo: no product, or the manager said no</button>`,
-  need:()=>[['Check in',has('checkin')],['2 photos outside the store',got('outside')],['Where you are set up',has('where')]]},
+  need:()=>[['Tap the check-in button',has('checkin')],ph('outside','outside the store'),['Answer "Where did they put you?"',has('where')]]},
  {id:'setup',when:'Before you start',title:'Buy, count and set up',coach:'Count the shelf, buy only what is on the list, then build the table.',
   body:()=>`${prodBlock(START_F)}
    <div class="card"><h3>Buy exactly this</h3><ul class="buy">
@@ -290,32 +295,32 @@ const NORMAL=[
      <p class="note">Your limit is $${CAP} with tax. Keep the receipt and every empty bottle.</p></div>
    <div class="card"><h3>Before any table photo</h3>${TABLE.map(([k,l])=>tick(k,l)).join('')}</div>
    ${slot('tableNo')}${slot('tableBA')}${slot('inside')}${help('setup')}`,
-  need:()=>[...PRODUCTS.map(p=>[`Shelf count: ${p.name}`,has(p.id+'_countIn')]),...TABLE.map(([k,l])=>[l,has(k)]),['Table photo without you',got('tableNo')],['Table photo with you',got('tableBA')],['4 photos inside the store',got('inside')]]},
+  need:()=>[...PRODUCTS.map(p=>[`Shelf count: ${p.name}`,has(p.id+'_countIn')]),...TABLE.map(([k,l])=>[l,has(k)]),ph('tableNo','your table, without you'),ph('tableBA','your table, with you behind it'),ph('inside','inside the store')]},
  {id:'during',when:'During the demo',title:'Pour, talk, photograph',coach:'A different shopper in every photo, cup in hand. Start early: you need 10.',
   body:()=>`<div class="card"><h3>Every pour</h3><ul class="plain"><li>Wait for the shopper to come to you</li><li>Check their ID</li><li>Pour 1 oz, then tell them about the wine</li></ul></div>
    <div class="tally"><span class="lbl">Samples poured</span><button type="button" class="minus" id="tMinus" aria-label="Take one off">−</button><output id="tOut">0</output><button type="button" id="tPlus" aria-label="Add one sample">+</button></div>
    ${slot('shoppers')}
    <div class="card"><h3>Four things shoppers said</h3><p class="note">Write them down as you hear them. Four are required.</p>${COMMENTS.map(i=>text('c'+i,'Comment '+i)).join('')}</div>${help('during')}`,
-  need:()=>[['Samples poured',(S.poured||0)>0],['10 photos of different shoppers tasting',got('shoppers')],...COMMENTS.map(i=>['Shopper comment '+i,has('c'+i)])]},
+  need:()=>[['Count your samples with the + button',(S.poured||0)>0],ph('shoppers','different shoppers tasting'),...COMMENTS.map(i=>['Shopper comment '+i,has('c'+i)])]},
  {id:'wrap',when:'Last 15 minutes',title:'Count up and photograph your receipt',coach:'Count the shelf again and get the receipt in before it gets lost.',
   body:()=>`${prodBlock(END_F)}${slot('receipt')}${num('receiptTotal','Receipt total $')}<p class="alert" id="capMsg"></p>${help('wrap')}`,
-  need:()=>[...PRODUCTS.flatMap(p=>END_F.map(([k,l])=>[`${l}: ${p.name}`,has(p.id+'_'+k)])),['Receipt photo',got('receipt')],['Receipt total',has('receiptTotal')]]},
+  need:()=>[...PRODUCTS.flatMap(p=>END_F.map(([k,l])=>[`${l}: ${p.name}`,has(p.id+'_'+k)])),ph('receipt','your receipt'),['Receipt total',has('receiptTotal')]]},
  {id:'report',when:'Before you leave',title:'Manager signs',coach:'Hand your phone to the manager to sign, then send everything before you walk out.',
   body:()=>`${text('mgrName','Store manager full name')}
    <div class="f"><div class="sigrow"><span style="font-size:13px;font-weight:500;color:var(--muted)">Store manager signature</span><button type="button" class="link" id="sigClear">Clear</button></div>
    <canvas class="sig" id="sig" aria-label="Signature box. Hand the phone to the manager to sign."></canvas></div>${help('report')}`,
-  need:()=>[['Manager name',has('mgrName')],['Manager signature',signed]]}
+  need:()=>[['Manager name',has('mgrName')],['Manager signs in the box',signed]]}
 ];
 const BLOCKED=[
  {id:'arrive',when:'On arrival',title:'Check in',coach:'Check in so there is a record that you came.',
   body:()=>`<div id="checkin"></div>${slot('outside')}`,
-  need:()=>[['Check in',has('checkin')],['1 photo outside the store',got('outside')]]},
+  need:()=>[['Tap the check-in button',has('checkin')],ph('outside','outside the store')]},
  {id:'blocked',when:'Demo could not run',title:'Show what happened',coach:'You still report and you still get three photos: outside, inside, and the shelf.',
   body:()=>`<p class="alert soft">Contact your TLE coordinator now, before you leave the store.</p>
    ${seg('why','What stopped the demo?',['Product not in stock','Manager said no','Something else'])}
    <label class="f"><span>What happened, and who you spoke to</span><textarea id="f-whyNote" data-k="whyNote" style="min-height:76px">${val('whyNote')}</textarea></label>
    ${slot('inside')}${slot('shelf')}${help('blocked')}<button class="btn ghost" type="button" id="unblockBtn">Go back. I can run the demo after all</button>`,
-  need:()=>[['What stopped the demo',has('why')],['What happened',has('whyNote')],['1 photo inside the store',got('inside')],['Photo of the shelf',got('shelf')]]}
+  need:()=>[['What stopped the demo',has('why')],['What happened',has('whyNote')],ph('inside','inside the store'),ph('shelf','the shelf where the wine should be')]}
 ];
 const stages=()=>S.blocked?BLOCKED:NORMAL;
 
@@ -323,7 +328,7 @@ const host=document.getElementById('stages');
 let sig=null,ctx=null,drawing=false;
 function render(openId){
   signed=false;
-  host.innerHTML=stages().map(s=>`<details class="stage" id="st-${s.id}"><summary><div class="stitle"><div class="when">${s.when}</div><h2>${s.title}</h2></div><span class="chip" id="chip-${s.id}"></span></summary><div class="sbody">${s.body()}</div></details>`).join('');
+  host.innerHTML=stages().map(s=>`<details class="stage" id="st-${s.id}"><summary><div class="stitle"><div class="when">${s.when}</div><h2>${s.title}</h2></div><span class="chip" id="chip-${s.id}"></span></summary><div class="sbody"><div class="todo" id="todo-${s.id}" aria-live="polite"></div>${s.body()}</div></details>`).join('');
   drawCheckin();
   Object.keys(SLOTS).forEach(id=>{if(document.getElementById('slot-'+id))drawSlot(id)});
   sig=document.getElementById('sig');
@@ -366,7 +371,7 @@ function drawSlot(id){
     if(n<sl.min){t=`${sl.min-n} more to reach the minimum. Under ${sl.min} different people, the event is rejected and has to be redone.`;c='msg bad'}
     else if(n<need){t=`Minimum met. Keep going: ${need} is the target.`}
     else{t='Target met. More photos of new people only help.';c='msg good'}
-  }
+  }else if(n<need){const left=need-n;t=(sl.shots&&!S.blocked?`Next photo: ${sl.shots[n]}. `:'')+`${left} more needed.`}
   if(off){t=(t?t+' ':'')+`${off} photo${off>1?'s have':' has'} no location. Turn location on and retake if you can.`;c='msg bad'}
   m.textContent=t;m.className=c;
 }
@@ -378,6 +383,9 @@ function refresh(){
     const c=document.getElementById('chip-'+s.id);
     c.textContent=d===list.length?'Done':`${d} of ${list.length}`;
     c.className='chip'+(d===list.length?' done':d>0?' part':'');
+    const td=document.getElementById('todo-'+s.id);
+    td.className='todo'+(d===list.length?' ok':'');
+    td.innerHTML=d===list.length?'Everything in this step is done.':`<h3>Still to do in this step</h3><ul>${list.filter(x=>!x[1]).map(x=>`<li>${esc(x[0])}</li>`).join('')}</ul>`;
     if(d<list.length){if(!next)next=s;miss.push(`${s.title}: ${list.length-d} left`)}
   });
   document.getElementById('barText').textContent=`${done} of ${total} done`;
