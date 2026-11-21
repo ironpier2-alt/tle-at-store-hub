@@ -150,3 +150,10 @@ canvas.sig{width:100%;height:130px;background:var(--bg);border:1px solid var(--l
 .sum{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .sum li{display:flex;justify-content:space-between;gap:10px;font-size:14px}
 .sum b.ok{color:var(--good)}.sum b.no{color:var(--warn)}
+
+/* the machine's step lines, as the confirmation email prints them (2026-11-21) */
+.lines{gap:6px;font-size:15px}
+.lines p{margin:0}
+.lines ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.lines ul ul{margin-top:4px;gap:2px}
+.lines a{color:var(--accent,inherit)}

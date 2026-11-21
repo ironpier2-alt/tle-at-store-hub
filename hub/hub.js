@@ -2,7 +2,9 @@
    A client page loads its rule pack (window.HUB_PACK, from packs/*.js) and then this file.
    The pack says which steps exist, in what order, and what each step holds (its "parts").
    Part types this engine knows: checkin, photos, choice, ticks, counts, perProduct, buy, note, goal,
-   details, tally, comments, total, signature, alert, blockLink, unblockLink.
+   details, tally, comments, total, signature, alert, blockLink, unblockLink, lines.
+   "lines" (2026-11-21) shows a step's lines exactly as the confirmation email prints them ("* " bullets,
+   "  * " sub-bullets, **bold**, [words](link)); the machine builds packs with it (TLE Machine, AtStoreHub.gs).
    Any part can have when:{k,is} so it only shows (and only counts) after that answer is picked. */
 (function(){
 const P=window.HUB_PACK;
@@ -50,6 +52,13 @@ const slot=id=>`<div class="box" id="slot-${id}"><div class="bh"><h3>${esc(SLOTS
 const ph=id=>{const n=photos[id].length,w=want(id),nn=noun(id);return{t:w>1?`Take ${nn} photo ${Math.min(n+1,w)} of ${w}`:`Take the ${nn} photo`,ok:n>=w,el:'slot-'+id,photo:id}};
 const fld=(k,t)=>({t,ok:has(k),el:'f-'+k});
 const money=v=>'$'+(+v).toFixed(2).replace(/\.00$/,'');
+/* the email's wording → HTML (same rules as the machine's confirmMdToHtml_) */
+const inl=s=>esc(s).replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+const md=t=>{const out=[];let list=null;
+  String(t||'').split('\n').forEach(raw=>{const m=raw.match(/^(\s*)[*\-•]\s+(.*)$/);
+    if(m){if(!list){list=[];out.push(list)}if(m[1].length>=2&&list.length)list[list.length-1].sub.push(m[2]);else list.push({t:m[2],sub:[]});return}
+    list=null;if(raw.trim())out.push(raw.trim())});
+  return out.map(b=>typeof b==='string'?`<p>${inl(b)}</p>`:`<ul>${b.map(i=>`<li>${inl(i.t)}${i.sub.length?`<ul>${i.sub.map(x=>`<li>${inl(x)}</li>`).join('')}</ul>`:''}</li>`).join('')}</ul>`).join('')};
 
 /* ---------- parts: what each kind of tool looks like, and what it needs before the step is done ---------- */
 const PARTS={
@@ -63,7 +72,7 @@ const PARTS={
   ticks:{html:p=>`<div class="box" id="b-${p.id}"><div class="bh"><h3>${esc(p.title)}</h3></div>
       ${p.script?`<details class="mini"><summary>${esc(p.script.summary)}</summary><p>${esc(p.script.text)}</p></details>`:''}
       ${p.items.map(([k,l])=>tick(k,l)).join('')}</div>`,
-    need:p=>p.items.map(([k,l])=>({t:`${p.title}: ${l.charAt(0).toLowerCase()+l.slice(1)}`,ok:has(k),el:'b-'+p.id}))},
+    need:p=>p.items.map(([k,l])=>({t:`${p.title}: ${/^I\b/.test(l)?l:l.charAt(0).toLowerCase()+l.slice(1)}`,ok:has(k),el:'b-'+p.id}))},
   counts:{html:p=>`<div class="box" id="b-count-${p.field}"><div class="bh"><h3>${esc(p.title)}</h3></div>${P.products.map(x=>row(x.id+'_'+p.field,x.name)).join('')}</div>`,
     need:p=>P.products.map(x=>fld(x.id+'_'+p.field,`${p.todo||'Enter shelf count'}: ${x.name}`))},
   perProduct:{html:p=>P.products.map(x=>`<div class="box"><div class="bh"><h3>${esc(x.name)}</h3></div>${p.fields.map(([f,label])=>row(x.id+'_'+f,label)).join('')}</div>`).join(''),
@@ -84,7 +93,8 @@ const PARTS={
       <canvas class="sig" id="sig" aria-label="Signature box. Hand the phone to the manager to sign."></canvas></div>`,
     need:()=>[fld('mgrName','Enter the manager\'s name'),{t:'Get the manager to sign',ok:signed,el:'sig'}]},
   blockLink:{html:p=>`<button class="link" type="button" id="blockBtn">${esc(p.label)}</button>`,need:()=>[]},
-  unblockLink:{html:()=>`<button class="link" type="button" id="unblockBtn">Go back. I can run the demo after all</button>`,need:()=>[]}
+  unblockLink:{html:()=>`<button class="link" type="button" id="unblockBtn">Go back. I can run the demo after all</button>`,need:()=>[]},
+  lines:{html:p=>`<div class="box lines">${p.title?`<div class="bh"><h3>${esc(p.title)}</h3></div>`:''}${md(p.md)}</div>`,need:()=>[]}
 };
 const on=p=>!p.when||(p.when.is!==undefined?S[p.when.k]===p.when.is:has(p.when.k));
 const parts=s=>(s.parts||[]).filter(on);
@@ -178,7 +188,7 @@ function render(){
   }else body=parts(s).map(p=>PARTS[p.type].html(p)).join('');
   $('view').innerHTML=`<button type="button" class="back" data-home="1">‹ All steps</button>
     <div class="shead"><div><div class="when">Step ${idx+1} of ${list.length} · ${esc(s.when)}</div><h2>${esc(T(s))}</h2></div>${qbtn(s.id,'Help with this step')}</div>
-    <div class="qa" id="qa-${s.id}" hidden><p>${esc(I(s))}</p><dl>${(s.help||[]).map(([q,a])=>`<div><dt>${esc(q)}</dt><dd>${esc(a)}</dd></div>`).join('')}<div><dt>Still stuck?</dt><dd>Contact your TLE coordinator. Their number will show here in the live hub.</dd></div></dl></div>
+    <div class="qa" id="qa-${s.id}" hidden><p>${esc(I(s))}</p><dl>${(s.help||[]).map(([q,a])=>`<div><dt>${esc(q)}</dt><dd>${esc(a)}</dd></div>`).join('')}<div><dt>Still stuck?</dt><dd>${P.phone?`Text ${esc(P.phone)} with your name, your store and what happened.`:'Contact your TLE coordinator. Their number will show here in the live hub.'}</dd></div></dl></div>
     ${body}<div id="todo"></div>`;
   drawCheckin();Object.keys(SLOTS).forEach(drawSlot);
   sig=$('sig');

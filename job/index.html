@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>At-Store Hub</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../hub/hub.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><img src="../hub/logo.png" alt="the Lynne experience"></div>
+  <p class="proto" id="loadMsg" role="status">Loading your At-Store Hub…</p>
+</div>
+<script>
+/* Any job's At-Store Hub (2026-11-21). The confirmation email links here with ?j=<job number>&k=<the job's key>.
+   The job's content is built by the TLE Machine from the training manual and asked for from its receiver web app.
+   The last copy is kept on this phone, so the hub still opens in a store with no signal. */
+(function(){
+  var API='https://script.google.com/macros/s/AKfycbzVzD1nF2NQj37ganGWsXLDBKC9dgXQryTcinvYFk-G8cnTeNkWcXOaxC7yMthL14RD6w/exec';
+  var q=new URLSearchParams(location.search), j=(q.get('j')||'').replace(/\D/g,''), k=(q.get('k')||'').trim();
+  var CK='tleHubPack:'+j;
+  function say(t){var m=document.getElementById('loadMsg');if(m)m.textContent=t}
+  function start(pack){document.title=(pack.title||'At-Store Hub')+' · Hub';window.HUB_PACK=pack;var s=document.createElement('script');s.src='../hub/hub.js';document.body.appendChild(s)}
+  function saved(){try{var c=JSON.parse(localStorage.getItem(CK)||'null');return c&&c.k===k&&c.pack?c.pack:null}catch(e){return null}}
+  if(!j||!k){say('This link is missing its job. Open the "Open your At-Store Hub" button in your confirmation email.');return}
+  fetch(API+'?hub='+encodeURIComponent(j)+'&k='+encodeURIComponent(k)).then(function(r){return r.json()}).then(function(d){
+    if(d&&d.ok&&d.pack){try{localStorage.setItem(CK,JSON.stringify({k:k,pack:d.pack}))}catch(e){}start(d.pack);return}
+    var c=saved();if(c){start(c);return}
+    say((d&&d.message)||'This At-Store Hub link is not valid. Open the link in your confirmation email again.');
+  }).catch(function(){
+    var c=saved();if(c){start(c);return}
+    say('The At-Store Hub could not load. Check your signal and try again, or use your confirmation email.');
+  });
+})();
+</script>
+</body>
+</html>
