@@ -3,13 +3,12 @@ window.HUB_PACK={
   key:'zonin',
   title:'Zonin Prosecco & Rosé',
   store:'H-E-B (sample store)',
-  details:[['When','Sample shift, 4 hours'],['You are here for','Amarko Marketing Solutions'],['Spend limit','$48.43 with tax'],['Photos','18, all with location']],
+  details:[['When','Sample shift, 4 hours'],['You are here for','Amarko Marketing Solutions'],['Photos','18, all with location']],
   lists:[
     ['Bring',['RBS or TIPS certification','Table and a black fabric cloth to the floor, no plastic','Wine opener, ice bucket, serving tray, small trash can, pen']],
     ['Kit',['50 cups, 25 napkins, 2 pairs of gloves, 21+ sign, acrylic sign']],
     ['Wear',['Black or white polo or dress shirt, no logos. Black slacks, closed-toe shoes, long hair tied back.']],
     ['Location',['Turn on Location Services for your camera, and tap Allow when this page asks.']]],
-  cap:48.43,
   photoLocation:true,
   products:[{id:'pros',name:'Prosecco 187ml'},{id:'rose',name:'Prosecco Rosé 187ml'}],
   photos:{
@@ -52,7 +51,7 @@ window.HUB_PACK={
             ['Someone looks under 21 or has no ID','Do not pour. No ID, no sample.']],
       parts:[{type:'note',text:'Every pour: check ID · 1 oz · ask before a photo.'},{type:'tally'},{type:'photos',id:'shoppers'},{type:'comments',n:4,title:'Four things shoppers said'}]},
     wrap:{when:'Last 15 minutes',title:'Count up and receipt',info:'Count the shelf again, enter how many bottles you used for sampling, then photograph your receipt and type its total.',
-      help:[['My receipt is over $48.43','Tell your TLE coordinator before you leave. Do not buy anything that is not on the list.'],['I lost the receipt','Ask customer service to reprint it.']],
+      help:[['I lost the receipt','Ask customer service to reprint it.']],
       parts:[{type:'perProduct',fields:[['countOut','Units left on shelf','Enter units left'],['used','Units used for sampling','Enter units used']]},
              {type:'photos',id:'receipt'},{type:'total',k:'receiptTotal',label:'Receipt total $'}]},
     report:{when:'Before you leave',title:'Manager\'s signature',info:'Type the manager\'s name and hand them your phone to sign. Then submit before you walk out of the store.',

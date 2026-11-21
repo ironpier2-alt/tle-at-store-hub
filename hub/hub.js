@@ -33,7 +33,7 @@ document.body.innerHTML=`<div class="wrap">
     <dl>${(P.details||[]).map(([t,d])=>`<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join('')}</dl>
     ${(P.lists||[]).map(([h,items])=>`<div><h3>${esc(h)}</h3><ul>${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>`).join('')}
   </div>
-  <p class="proto">Prototype. Nothing is sent anywhere yet.</p>
+  <p class="proto">${P.mode==='guide'?esc(P.guideNote||'Your guide for the day. Report everything in the ISDemos app.'):'Prototype. Nothing is sent anywhere yet.'}</p>
   <main id="view"></main>
 </div>`;
 
@@ -89,11 +89,35 @@ const PARTS={
 const on=p=>!p.when||(p.when.is!==undefined?S[p.when.k]===p.when.is:has(p.when.k));
 const parts=s=>(s.parts||[]).filter(on);
 
+/* ---------- guide-only mode (owner, 2026-11-21) ----------
+   Talent report in ISDemos, so the hub collects nothing ISDemos collects: each such tool becomes one check-off,
+   with the same rules shown. There is no "Send to TLE" step; the pack's last step is the ISDemos submit check. */
+const GUIDE=P.mode==='guide';
+const gtick=(k,label,body,id)=>`<div class="box" id="${id}">${body}${tick(k,label)}</div>`;
+const gneed=(k,t,id)=>[{t,ok:has(k),el:id}];
+const ptitle=id=>{const n=want(id),t=S.blocked?String(n):(SLOTS[id].countText||String(n));return`${SLOTS[id].title} · ${t} photo${t==='1'?'':'s'}`};
+if(GUIDE)Object.assign(PARTS,{
+  photos:{html:p=>{const sl=SLOTS[p.id],n=want(p.id),shots=(sl.shots||[]).slice(0,n);
+      return gtick('g_ph_'+p.id,sl.guideTick||`Took ${n>1?'them':'it'} in ISDemos`,`<div class="bh"><h3>${esc(ptitle(p.id))}</h3></div>${shots.length&&!S.blocked?`<ol class="rules" style="padding-left:18px;list-style:decimal">${shots.map(s=>`<li style="display:list-item">${esc(s)}</li>`).join('')}</ol>`:''}${rules(p.id)}${sl.tip?`<p class="note">${esc(sl.tip)}</p>`:''}`,'b-g-ph-'+p.id)},
+    need:p=>gneed('g_ph_'+p.id,`Take the ${noun(p.id)} photo${want(p.id)>1?'s':''} in ISDemos`,'b-g-ph-'+p.id)},
+  counts:{html:p=>gtick('g_'+p.field,'Counted, and entered in ISDemos',`<div class="bh"><h3>${esc(p.title)}</h3></div><ul class="buy">${P.products.map(x=>`<li><span>${esc(x.name)}</span></li>`).join('')}</ul>`,'b-g-'+p.field),
+    need:p=>gneed('g_'+p.field,p.guideTodo||'Count the shelf and enter it in ISDemos','b-g-'+p.field)},
+  perProduct:{html:p=>gtick('g_end','Entered in ISDemos',`<div class="bh"><h3>For each product</h3></div><ul class="buy">${p.fields.map(([,label])=>`<li><span>${esc(label)}</span></li>`).join('')}</ul><p class="note">${P.products.map(x=>esc(x.name)).join(' · ')}</p>`,'b-g-end'),
+    need:()=>gneed('g_end','Enter the final counts in ISDemos','b-g-end')},
+  comments:{html:p=>gtick('g_comments',`Wrote ${p.n} comments in ISDemos`,`<div class="bh"><h3>${esc(p.title)}</h3></div><p class="note">Write down what shoppers say about the product, in their words.</p>`,'b-g-comments'),
+    need:p=>gneed('g_comments',`Write ${p.n} shopper comments in ISDemos`,'b-g-comments')},
+  total:{html:()=>gtick('g_total','Receipt photo and total are in ISDemos',`<div class="bh"><h3>Receipt</h3></div><p class="note">Lay it flat. Store name, date, every item and the total must show.</p>`,'b-g-total'),
+    need:()=>gneed('g_total','Put the receipt photo and total in ISDemos','b-g-total')},
+  signature:{html:()=>gtick('g_sig','The manager signed my ISDemos report',`<div class="bh"><h3>Store manager</h3></div><p class="note">Hand the manager your phone with the ISDemos report open, and ask them to sign.</p>`,'b-g-sig'),
+    need:()=>gneed('g_sig','Get the manager to sign in ISDemos','b-g-sig')},
+  tally:{html:PARTS.tally.html,need:()=>[]}
+});
+
 /* ---------- steps ---------- */
 const SEND={id:'send',when:'Last thing',title:'Submit to TLE',info:(P.send&&P.send.info)||'Submit before you leave the store.',help:(P.send&&P.send.help)||[],need:()=>[]};
 const step=id=>{const d=P.steps[id];return{id,...d,need:()=>parts(d).flatMap(p=>PARTS[p.type].need(p))}};
 const work=()=>(S.blocked?P.blockedFlow:P.flow).map(step);
-const all=()=>[...work(),SEND];
+const all=()=>GUIDE?work():[...work(),SEND];
 const T=s=>S.blocked&&s.titleBlocked?s.titleBlocked:s.title;
 const I=s=>S.blocked&&s.infoBlocked?s.infoBlocked:s.info;
 const stepDone=s=>s.id==='send'?sent:s.need().every(n=>n.ok);
