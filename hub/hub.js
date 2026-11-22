@@ -5,7 +5,10 @@
    details, tally, comments, total, signature, alert, blockLink, unblockLink, lines.
    "lines" (2026-11-21) shows a step's lines exactly as the confirmation email prints them ("* " bullets,
    "  * " sub-bullets, **bold**, [words](link)); the machine builds packs with it (TLE Machine, AtStoreHub.gs).
-   Any part can have when:{k,is} so it only shows (and only counts) after that answer is picked. */
+   Any part can have when:{k,is} so it only shows (and only counts) after that answer is picked.
+   Sending (2026-11-21): a talent's own link (P.shiftKey, from job/?s=...) sends to the TLE Machine (window.HUB_API): the check-in on
+   every job; on jobs where talent report in the hub (mode 'collect') each photo when it is kept, and the report when they press
+   Send. Everything waits on the phone (IndexedDB) until it is sent, so no signal in the store loses nothing. P.preview: saves nothing. */
 (function(){
 const P=window.HUB_PACK;
 const BASE=new URL('.',document.currentScript.src).href;
@@ -20,10 +23,61 @@ const clock=d=>d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
 const SLOTS=P.photos||{};
 const photos={};Object.keys(SLOTS).forEach(k=>photos[k]=[]);
 const pending={},viewing={};
-let signed=false,sigData=null,sent=false;
+let signed=!!S.sig,sigData=S.sig||null;
+const API=window.HUB_API||'';
+const LIVE=!!(P.shiftKey&&API&&!P.preview);
+const COLLECT=P.mode==='collect';
+const stamp=d=>d.toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+
+/* ---------- the phone's outbox: photos and messages wait here until TLE has them ---------- */
+const DB=(()=>{let op=null;const mem={photos:new Map(),out:new Map()};let seq=1;
+  const open=()=>op||(op=new Promise((res,rej)=>{try{const r=indexedDB.open('tleHub',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('photos',{keyPath:'id'});d.createObjectStore('out',{keyPath:'n',autoIncrement:true})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}}));
+  const tx=(st,mode,fn)=>open().then(d=>new Promise((res,rej)=>{const t=d.transaction(st,mode),r=fn(t.objectStore(st));t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error)}));
+  return{put:(st,v)=>tx(st,'readwrite',o=>o.put(v)).catch(()=>{if(st==='out'&&v.n==null)v.n=seq++;mem[st].set(st==='out'?v.n:v.id,v)}),
+    del:(st,k)=>tx(st,'readwrite',o=>o.delete(k)).catch(()=>{mem[st].delete(k)}),
+    all:st=>tx(st,'readonly',o=>o.getAll()).catch(()=>[...mem[st].values()])};})();
+const uid=()=>{const a=new Uint8Array(8);(window.crypto||{getRandomValues:x=>x.map(()=>Math.random()*256|0)}).getRandomValues(a);return[...a].map(b=>b.toString(16).padStart(2,'0')).join('')};
+const dataUrl=b=>new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>res('');r.readAsDataURL(b)});
+/* phone photos are big: 1600 px on the long side is plenty for a report and sends fast on a weak signal */
+const shrink=f=>new Promise(res=>{const u=URL.createObjectURL(f),im=new Image();im.onload=()=>{const r=Math.min(1,1600/Math.max(im.naturalWidth,im.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*r);c.height=Math.round(im.naturalHeight*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b||f),'image/jpeg',.82)};im.onerror=()=>{URL.revokeObjectURL(u);res(f)};im.src=u});
+let queued=0,busy=false,timer=null,wait=0,problem='',locating=0;
+function enqueue(body){if(!LIVE)return Promise.resolve();return DB.put('out',{k:P.key,body}).then(()=>{wait=0;pump()})}
+async function pump(){
+  if(busy||!LIVE)return;busy=true;clearTimeout(timer);
+  try{for(;;){
+    const items=(await DB.all('out')).filter(x=>x.k===P.key).sort((a,b)=>a.n-b.n);
+    queued=items.length;showSync();if(!items.length)break;
+    const it=items[0];let body=it.body,ph=null;
+    if(body.kind==='photo'){ph=(await DB.all('photos')).find(x=>x.id===body.id);if(!ph){await DB.del('out',it.n);continue}
+      body=Object.assign({},body,{loc:ph.loc||null,data:await dataUrl(ph.blob)})}
+    let r=null;
+    try{const res=await fetch(API,{method:'POST',body:'HUB\n'+JSON.stringify(Object.assign({s:P.shiftKey},body))});r=await res.json()}catch(e){r=null}
+    if(r&&(r.ok||r.stop)){
+      await DB.del('out',it.n);wait=0;
+      if(!r.ok)problem=r.message||'Something could not be sent. Text your TLE coordinator.';
+      if(r.ok&&ph){ph.sent=true;await DB.put('photos',ph)}
+      if(r.ok&&body.kind==='report'){S.reportOk=new Date().toISOString();save();const c=cur();if(c&&c.id==='send')render()}
+      continue}
+    wait=Math.min(wait?wait*2:5000,60000);break;
+  }}finally{busy=false;showSync();if(queued)timer=setTimeout(pump,wait||5000)}
+}
+function showSync(){
+  const el=$('sync');if(!el)return;
+  if(!LIVE){el.hidden=true;return}
+  const off=navigator.onLine===false;
+  el.hidden=false;
+  el.className='sync'+(queued?(off?' off':' busy'):' ok');
+  el.textContent=queued?(off?`No signal. ${queued} waiting on this phone; they send by themselves when you are back online.`:`Sending to TLE… ${queued} left. Keep this page open.`)
+    :S.reportOk?`Sent ✓ TLE has your report (${clock(new Date(S.reportOk))}).`:COLLECT?'Everything so far is with TLE ✓':(has('checkin')?'Your check-in is with TLE ✓':'');
+  if(problem)el.textContent+=' '+problem;
+  if(!el.textContent)el.hidden=true;
+}
+window.addEventListener('online',()=>{wait=0;pump()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){wait=0;pump()}});
 const want=id=>S.blocked&&P.blockedPhotoCount&&P.blockedPhotoCount[id]?P.blockedPhotoCount[id]:SLOTS[id].n;
 const noun=id=>SLOTS[id].noun||SLOTS[id].title.toLowerCase();
 
+const GUIDE_TOP=P.mode==='guide';
 /* ---------- shell ---------- */
 document.body.innerHTML=`<div class="wrap">
   <div class="logo"><img src="${BASE}logo.png" alt="the Lynne experience"></div>
@@ -35,7 +89,10 @@ document.body.innerHTML=`<div class="wrap">
     <dl>${(P.details||[]).map(([t,d])=>`<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join('')}</dl>
     ${(P.lists||[]).map(([h,items])=>`<div><h3>${esc(h)}</h3><ul>${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>`).join('')}
   </div>
-  <p class="proto">${P.mode==='guide'?esc(P.guideNote||'Your guide for the day. Report everything in the ISDemos app.'):'Prototype. Nothing is sent anywhere yet.'}</p>
+  <p class="proto">${P.preview?'Preview of this job\'s hub. Nothing you do here is saved or sent. Each talent opens their own link from their confirmation email.'
+    :P.test?'TEST link: what you send is filed as a test.'
+    :GUIDE_TOP?esc(P.guideNote||'Your guide for the day. Report everything in the ISDemos app.'):LIVE?'Your photos and report go to TLE from this page.':'Prototype. Nothing is sent anywhere yet.'}</p>
+  <p class="sync" id="sync" role="status" aria-live="polite" hidden></p>
   <main id="view"></main>
 </div>`;
 
@@ -49,7 +106,8 @@ const slot=id=>`<div class="box" id="slot-${id}"><div class="bh"><h3>${esc(SLOTS
   <div class="qa" id="qa-s-${id}" hidden>${rules(id)}${SLOTS[id].tip?`<p>${esc(SLOTS[id].tip)}</p>`:''}</div>
   <div class="tiles" id="th-${id}"></div><p class="tap" id="tap-${id}">Tap the pink box to take the next photo.</p><p class="msg" id="msg-${id}" aria-live="polite"></p><div id="pend-${id}"></div>
   <input hidden type="file" accept="image/*" capture="environment" id="file-${id}" data-slot="${id}"></div>`;
-const ph=id=>{const n=photos[id].length,w=want(id),nn=noun(id);return{t:w>1?`Take ${nn} photo ${Math.min(n+1,w)} of ${w}`:`Take the ${nn} photo`,ok:n>=w,el:'slot-'+id,photo:id}};
+const ph=id=>{const n=photos[id].length,w=want(id),nn=noun(id),sl=SLOTS[id];
+  return{t:sl.plain?(w>1?`Photo ${Math.min(n+1,w)} of ${w}: ${sl.title}`:`Photo: ${sl.title}`):w>1?`Take ${nn} photo ${Math.min(n+1,w)} of ${w}`:`Take the ${nn} photo`,ok:n>=w,el:'slot-'+id,photo:id}};
 const fld=(k,t)=>({t,ok:has(k),el:'f-'+k});
 const money=v=>'$'+(+v).toFixed(2).replace(/\.00$/,'');
 /* the email's wording → HTML (same rules as the machine's confirmMdToHtml_) */
@@ -124,13 +182,13 @@ if(GUIDE)Object.assign(PARTS,{
 });
 
 /* ---------- steps ---------- */
-const SEND={id:'send',when:'Last thing',title:'Submit to TLE',info:(P.send&&P.send.info)||'Submit before you leave the store.',help:(P.send&&P.send.help)||[],need:()=>[]};
+const SEND={id:'send',when:(P.send&&P.send.when)||'Last thing',title:(P.send&&P.send.title)||'Submit to TLE',info:(P.send&&P.send.info)||'Submit before you leave the store.',help:(P.send&&P.send.help)||[],need:()=>[]};
 const step=id=>{const d=P.steps[id];return{id,...d,need:()=>parts(d).flatMap(p=>PARTS[p.type].need(p))}};
 const work=()=>(S.blocked?P.blockedFlow:P.flow).map(step);
 const all=()=>GUIDE?work():[...work(),SEND];
 const T=s=>S.blocked&&s.titleBlocked?s.titleBlocked:s.title;
 const I=s=>S.blocked&&s.infoBlocked?s.infoBlocked:s.info;
-const stepDone=s=>s.id==='send'?sent:s.need().every(n=>n.ok);
+const stepDone=s=>s.id==='send'?!!S.sent:s.need().every(n=>n.ok);
 const cur=()=>S.cur?all().find(s=>s.id===S.cur)||null:null;
 const blockHome=()=>P.flow.find(id=>(P.steps[id].parts||[]).some(p=>p.type==='blockLink'))||P.flow[0];
 
@@ -139,7 +197,8 @@ function locate(done){
     navigator.geolocation.getCurrentPosition(p=>done([p.coords.latitude,p.coords.longitude]),()=>done(null),{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
   }catch(e){done(null)}
 }
-function checkIn(){S.checkin=clock(new Date());save();drawCheckin();refresh();locate(l=>{S.ciLoc=l?'on':'off';save();drawCheckin()})}
+function checkIn(){const d=new Date();S.checkin=clock(d);save();drawCheckin();refresh();
+  locate(l=>{S.ciLoc=l?'on':'off';save();drawCheckin();enqueue({kind:'checkin',clock:S.checkin,at:stamp(d),t:d.toISOString(),loc:l})})}
 function drawCheckin(){
   const el=$('checkin');if(!el)return;
   if(!has('checkin')){el.innerHTML=`<button class="btn" type="button" id="ciBtn">I'm here. Check me in</button>`;return}
@@ -183,8 +242,10 @@ function render(){
   const list=all(),idx=list.findIndex(x=>x.id===s.id);
   let body;
   if(s.id==='send'){
-    body=sent?`<p class="stamp">Prototype: nothing was sent.</p><p class="note">In the live hub your photos, receipt and report would now be with TLE, filed to this shift.</p>`
-      :`${P.send&&P.send.note?`<p class="goal">${esc(P.send.note)}</p>`:''}<div class="box"><ul class="sum" id="sum"></ul></div><button class="btn" type="button" id="sendBtn"></button>`;
+    const was=!LIVE&&S.sent?(P.preview?`<p class="stamp">Preview: nothing was sent.</p><p class="note">From a talent's own link, the photos, counts, comments and signature now go to TLE, filed to their shift.</p>`
+      :`<p class="stamp">Prototype: nothing was sent.</p><p class="note">In the live hub your photos, receipt and report would now be with TLE, filed to this shift.</p>`)
+      :LIVE&&S.sent?`<p class="stamp" id="sentNote">${S.reportOk?'Sent ✓ TLE has your photos and report.':'Sending… keep this page open until it says Sent.'}</p>`:'';
+    body=`${P.send&&P.send.md?`<div class="box lines">${md(P.send.md)}</div>`:''}${was}${P.send&&P.send.note?`<p class="goal">${esc(P.send.note)}</p>`:''}<div class="box"><ul class="sum" id="sum"></ul></div><button class="btn" type="button" id="sendBtn"></button>`;
   }else body=parts(s).map(p=>PARTS[p.type].html(p)).join('');
   $('view').innerHTML=`<button type="button" class="back" data-home="1">‹ All steps</button>
     <div class="shead"><div><div class="when">Step ${idx+1} of ${list.length} · ${esc(s.when)}</div><h2>${esc(T(s))}</h2></div>${qbtn(s.id,'Help with this step')}</div>
@@ -193,10 +254,10 @@ function render(){
   drawCheckin();Object.keys(SLOTS).forEach(drawSlot);
   sig=$('sig');
   if(sig){ctx=sig.getContext('2d');sizeSig();
-    if(sigData){const im=new Image();im.onload=()=>ctx.drawImage(im,0,0,sig.getBoundingClientRect().width,sig.getBoundingClientRect().height);im.src=sigData}
+    if(sigData){signed=true;const im=new Image();im.onload=()=>ctx.drawImage(im,0,0,sig.getBoundingClientRect().width,sig.getBoundingClientRect().height);im.src=sigData}
     sig.addEventListener('pointerdown',e=>{drawing=true;sig.setPointerCapture(e.pointerId);ctx.beginPath();ctx.moveTo(...pt(e))});
     sig.addEventListener('pointermove',e=>{if(!drawing)return;ctx.lineTo(...pt(e));ctx.stroke();if(!signed){signed=true;refresh()}});
-    ['pointerup','pointercancel'].forEach(n=>sig.addEventListener(n,()=>{if(drawing&&signed)sigData=sig.toDataURL();drawing=false}));}
+    ['pointerup','pointercancel'].forEach(n=>sig.addEventListener(n,()=>{if(drawing&&signed){sigData=sig.toDataURL();S.sig=sigData;save()}drawing=false}));}
   refresh();
 }
 function refresh(){
@@ -218,7 +279,7 @@ function refresh(){
   const idx=list.findIndex(x=>x.id===c.id),next=list[idx+1];
   if(c.id==='send'){
     const sum=$('sum');if(sum)sum.innerHTML=work().map((w,i)=>{const left=w.need().filter(n=>!n.ok).length;return`<li><span>${i+1}. ${esc(T(w))}</span><b class="${left?'no':'ok'}">${left?left+' left':'Done'}</b></li>`}).join('');
-    const sb=$('sendBtn');if(sb){sb.textContent=allDone?'Send my demo to TLE':'Finish the steps above first';sb.disabled=!allDone;sb.className=allDone?'btn go':'btn'}
+    const sb=$('sendBtn');if(sb){sb.textContent=!allDone?'Finish the steps above first':S.sent?'Send again (replaces what you sent)':'Send my demo to TLE';sb.disabled=!allDone;sb.className=allDone&&!S.sent?'btn go':allDone?'btn ghost':'btn'}
     $('todo').innerHTML=`<button class="btn ghost" type="button" data-home="1">Back to the list</button>`;
   }else{
     const miss=c.need().filter(n=>!n.ok);
@@ -249,7 +310,7 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.type==='radio'){S[t.name]=t.value;save();const c=cur();if(c&&(c.parts||[]).some(p=>p.when&&p.when.k===t.name))render();else refresh()}
   if(t.type==='checkbox'&&t.dataset.k){S[t.dataset.k]=t.checked;save();refresh()}
-  if(t.dataset&&t.dataset.slot&&t.files[0]){const id=t.dataset.slot;delete viewing[id];pending[id]={u:URL.createObjectURL(t.files[0]),t:new Date()};t.value='';drawSlot(id);$('pend-'+id).scrollIntoView({block:'center'})}
+  if(t.dataset&&t.dataset.slot&&t.files[0]){const id=t.dataset.slot;delete viewing[id];pending[id]={u:URL.createObjectURL(t.files[0]),t:new Date(),file:t.files[0]};t.value='';drawSlot(id);$('pend-'+id).scrollIntoView({block:'center'})}
 });
 document.addEventListener('click',e=>{
   const t=e.target.closest('button,label')||e.target,id=t.id,d=t.dataset||{};
@@ -257,21 +318,50 @@ document.addEventListener('click',e=>{
   if(id==='ciBtn')checkIn();
   if(id==='tPlus'){S.poured=(S.poured||0)+1;save();refresh()}
   if(id==='tMinus'){S.poured=Math.max(0,(S.poured||0)-1);save();refresh()}
-  if(id==='sigClear'){sizeSig();signed=false;sigData=null;refresh()}
+  if(id==='sigClear'){sizeSig();signed=false;sigData=null;delete S.sig;save();refresh()}
   if(id==='blockBtn'){S.blocked=true;goTo('blocked')}
   if(id==='unblockBtn'){S.blocked=false;goTo(blockHome())}
-  if(id==='sendBtn'&&!t.disabled){sent=true;render()}
+  if(id==='sendBtn'&&!t.disabled)sendReport();
   if(d.home)goTo('');
   if(d.go)goTo(d.go);
   if(d.do!==undefined)doItem(+d.do);
   if(d.q){const p=$('qa-'+d.q);p.hidden=!p.hidden;t.setAttribute('aria-expanded',String(!p.hidden))}
-  if(d.keep){const s=d.keep,p=pending[s];delete pending[s];photos[s].push(p);drawSlot(s);refresh();locate(l=>{p.loc=l;drawSlot(s)})}
+  if(d.keep)keepPhoto(d.keep);
   if(d.retake){const s=d.retake;URL.revokeObjectURL(pending[s].u);delete pending[s];drawSlot(s);$('file-'+s).click()}
   if(d.view){const[s,i]=d.view.split(':');viewing[s]=viewing[s]===+i?undefined:+i;drawSlot(s)}
   if(d.close){delete viewing[d.close];drawSlot(d.close)}
-  if(d.rm){const[s,i]=d.rm.split(':');photos[s].splice(+i,1);delete viewing[s];drawSlot(s);refresh()}
+  if(d.rm){const[s,i]=d.rm.split(':');const gone=photos[s].splice(+i,1)[0];delete viewing[s];drawSlot(s);refresh();
+    if(gone&&gone.id)DB.all('photos').then(all=>{const r=all.find(x=>x.id===gone.id);DB.del('photos',gone.id);if(r&&r.sent)enqueue({kind:'remove',id:gone.id})})}
 });
 
+/* a kept photo: made smaller, kept on the phone, located, then sent */
+async function keepPhoto(s){
+  const p=pending[s];delete pending[s];if(!p)return;
+  p.id=uid();photos[s].push(p);drawSlot(s);refresh();locating++;
+  let blob=p.file;try{blob=await shrink(p.file)}catch(e){}
+  const rec={id:p.id,k:P.key,slot:s,t:p.t.toISOString(),blob,loc:undefined,sent:false};
+  await DB.put('photos',rec);
+  locate(async l=>{p.loc=l;rec.loc=l;drawSlot(s);await DB.put('photos',rec);locating--;
+    if(COLLECT)enqueue({kind:'photo',id:p.id,slot:s,title:SLOTS[s].title,n:photos[s].indexOf(p)+1,at:stamp(p.t),clock:clock(p.t)})});
+}
+/* the report: everything the steps collected, labelled, so TLE can read it as it is */
+function sendReport(){
+  if(!LIVE){S.sent=true;save();render();return}
+  if(locating>0){const b=$('sendBtn');if(b){b.disabled=true;b.textContent='Finishing your photos…'}setTimeout(sendReport,800);return}
+  const ticks=[];(S.blocked?P.blockedFlow:P.flow).forEach(id=>{const st=P.steps[id];if(st)parts(st).forEach(p=>{if(p.type==='ticks')p.items.forEach(([k,l])=>{if(S[k])ticks.push(l)})})});
+  const cnt=f=>(P.products||[]).map(x=>[x.name,S[x.id+'_'+f]||'']);
+  const comments=[];for(let i=1;i<=20;i++)if(has('c'+i))comments.push(S['c'+i]);
+  const nPhotos=Object.keys(photos).reduce((a,k)=>a+photos[k].length,0);
+  S.sent=new Date().toISOString();S.reportOk='';save();
+  enqueue({kind:'report',blocked:!!S.blocked,why:S.why||'',note:S.whatHappened||'',at:stamp(new Date()),countsIn:cnt('countIn'),countsOut:cnt('countOut'),
+    poured:S.poured||0,comments,receiptTotal:S.receiptTotal||'',mgrName:S.mgrName||'',sig:S.sig||'',ticks,photos:nPhotos});
+  render();
+}
+
 S.cur='';
+/* photos kept on this phone come back when the page is opened again */
+DB.all('photos').then(all=>{all.filter(r=>r.k===P.key&&photos[r.slot]).sort((a,b)=>a.t<b.t?-1:1).forEach(r=>{
+  photos[r.slot].push({id:r.id,u:URL.createObjectURL(r.blob),t:new Date(r.t),loc:r.loc===undefined?null:r.loc})});
+  if(all.some(r=>r.k===P.key))render()}).finally(()=>{showSync();pump()});
 render();
 })();

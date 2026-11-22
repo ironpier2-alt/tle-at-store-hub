@@ -14,19 +14,20 @@
   <p class="proto" id="loadMsg" role="status">Loading your At-Store Hub…</p>
 </div>
 <script>
-/* Any job's At-Store Hub (2026-11-21). The confirmation email links here with ?j=<job number>&k=<the job's key>.
-   The job's content is built by the TLE Machine from the training manual and asked for from its receiver web app.
+/* Any job's At-Store Hub (2026-11-21). Each talent's confirmation email links here with ?s=<their shift key>: their own store,
+   date and time, and what they do here is sent to TLE. The job's own link (?j=<job number>&k=<the job's key>) is a preview
+   that saves nothing. The content is built by the TLE Machine from the training manual and asked for from its receiver web app.
    The last copy is kept on this phone, so the hub still opens in a store with no signal. */
 (function(){
   var API='https://script.google.com/macros/s/AKfycbzVzD1nF2NQj37ganGWsXLDBKC9dgXQryTcinvYFk-G8cnTeNkWcXOaxC7yMthL14RD6w/exec';
-  var q=new URLSearchParams(location.search), j=(q.get('j')||'').replace(/\D/g,''), k=(q.get('k')||'').trim();
-  var CK='tleHubPack:'+j;
+  var q=new URLSearchParams(location.search), s=(q.get('s')||'').trim().toLowerCase(), j=(q.get('j')||'').replace(/\D/g,''), k=(q.get('k')||'').trim();
+  var CK=s?'tleHubPack:s:'+s:'tleHubPack:'+j, ask=s?'?hubs='+encodeURIComponent(s):'?hub='+encodeURIComponent(j)+'&k='+encodeURIComponent(k), lock=s||k;
   function say(t){var m=document.getElementById('loadMsg');if(m)m.textContent=t}
-  function start(pack){document.title=(pack.title||'At-Store Hub')+' · Hub';window.HUB_PACK=pack;var s=document.createElement('script');s.src='../hub/hub.js';document.body.appendChild(s)}
-  function saved(){try{var c=JSON.parse(localStorage.getItem(CK)||'null');return c&&c.k===k&&c.pack?c.pack:null}catch(e){return null}}
-  if(!j||!k){say('This link is missing its job. Open the "Open your At-Store Hub" button in your confirmation email.');return}
-  fetch(API+'?hub='+encodeURIComponent(j)+'&k='+encodeURIComponent(k)).then(function(r){return r.json()}).then(function(d){
-    if(d&&d.ok&&d.pack){try{localStorage.setItem(CK,JSON.stringify({k:k,pack:d.pack}))}catch(e){}start(d.pack);return}
+  function start(pack){document.title=(pack.title||'At-Store Hub')+' · Hub';window.HUB_API=API;window.HUB_PACK=pack;var x=document.createElement('script');x.src='../hub/hub.js';document.body.appendChild(x)}
+  function saved(){try{var c=JSON.parse(localStorage.getItem(CK)||'null');return c&&c.k===lock&&c.pack?c.pack:null}catch(e){return null}}
+  if(!s&&(!j||!k)){say('This link is missing its job. Open the "Open your At-Store Hub" button in your confirmation email.');return}
+  fetch(API+ask).then(function(r){return r.json()}).then(function(d){
+    if(d&&d.ok&&d.pack){try{localStorage.setItem(CK,JSON.stringify({k:lock,pack:d.pack}))}catch(e){}start(d.pack);return}
     var c=saved();if(c){start(c);return}
     say((d&&d.message)||'This At-Store Hub link is not valid. Open the link in your confirmation email again.');
   }).catch(function(){
