@@ -33,29 +33,35 @@ const stamp=d=>d.toLocaleString([], {weekday:'short',month:'short',day:'numeric'
 const DB=(()=>{let op=null;const mem={photos:new Map(),out:new Map()};let seq=1;
   const open=()=>op||(op=new Promise((res,rej)=>{try{const r=indexedDB.open('tleHub',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('photos',{keyPath:'id'});d.createObjectStore('out',{keyPath:'n',autoIncrement:true})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}}));
   const tx=(st,mode,fn)=>open().then(d=>new Promise((res,rej)=>{const t=d.transaction(st,mode),r=fn(t.objectStore(st));t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error)}));
-  return{put:(st,v)=>tx(st,'readwrite',o=>o.put(v)).catch(()=>{if(st==='out'&&v.n==null)v.n=seq++;mem[st].set(st==='out'?v.n:v.id,v)}),
-    del:(st,k)=>tx(st,'readwrite',o=>o.delete(k)).catch(()=>{mem[st].delete(k)}),
-    all:st=>tx(st,'readonly',o=>o.getAll()).catch(()=>[...mem[st].values()])};})();
+  /* Some in-app browsers (the Gmail app's, private tabs) refuse to store things. What they refuse is kept in memory instead,
+     and every read joins both, so nothing is lost while the page is open. (2026-11-21: photos were dropped this way.) */
+  const memKey=(st,v)=>st==='out'?v.n:v.id;
+  return{put:(st,v)=>tx(st,'readwrite',o=>o.put(v)).then(k=>{if(st==='out'&&v.n==null)v.n=k}).catch(()=>{if(st==='out'&&v.n==null)v.n=1e9+seq++;mem[st].set(memKey(st,v),v)}),
+    del:(st,k)=>{mem[st].delete(k);return tx(st,'readwrite',o=>o.delete(k)).catch(()=>{})},
+    all:st=>tx(st,'readonly',o=>o.getAll()).catch(()=>[]).then(a=>{const seen=new Set(a.map(v=>memKey(st,v)));return a.concat([...mem[st].values()].filter(v=>!seen.has(memKey(st,v))))})};})();
 const uid=()=>{const a=new Uint8Array(8);(window.crypto||{getRandomValues:x=>x.map(()=>Math.random()*256|0)}).getRandomValues(a);return[...a].map(b=>b.toString(16).padStart(2,'0')).join('')};
 const dataUrl=b=>new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>res('');r.readAsDataURL(b)});
 /* phone photos are big: 1600 px on the long side is plenty for a report and sends fast on a weak signal */
 const shrink=f=>new Promise(res=>{const u=URL.createObjectURL(f),im=new Image();im.onload=()=>{const r=Math.min(1,1600/Math.max(im.naturalWidth,im.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*r);c.height=Math.round(im.naturalHeight*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b||f),'image/jpeg',.82)};im.onerror=()=>{URL.revokeObjectURL(u);res(f)};im.src=u});
 let queued=0,busy=false,timer=null,wait=0,problem='',locating=0;
-function enqueue(body){if(!LIVE)return Promise.resolve();return DB.put('out',{k:P.key,body}).then(()=>{wait=0;pump()})}
+let order=0;
+function enqueue(body){if(!LIVE)return Promise.resolve();return DB.put('out',{k:P.key,o:Date.now()*1000+(order++%1000),body}).then(()=>{wait=0;pump()})}
 async function pump(){
   if(busy||!LIVE)return;busy=true;clearTimeout(timer);
   try{for(;;){
-    const items=(await DB.all('out')).filter(x=>x.k===P.key).sort((a,b)=>a.n-b.n);
+    const items=(await DB.all('out')).filter(x=>x.k===P.key).sort((a,b)=>(a.o||a.n)-(b.o||b.n));
     queued=items.length;showSync();if(!items.length)break;
     const it=items[0];let body=it.body,ph=null;
-    if(body.kind==='photo'){ph=(await DB.all('photos')).find(x=>x.id===body.id);if(!ph){await DB.del('out',it.n);continue}
-      body=Object.assign({},body,{loc:ph.loc||null,data:await dataUrl(ph.blob)})}
+    if(body.kind==='photo'){ph=(await DB.all('photos')).find(x=>x.id===body.id)||null;
+      if(!body.data&&ph)body=Object.assign({},body,{data:ph.data||(ph.blob?await dataUrl(ph.blob):'')});
+      if(!body.data){await DB.del('out',it.n);problem='A photo could not be read on this phone. Take it again, or text your TLE coordinator.';continue}
+      if(ph&&ph.loc!==undefined)body=Object.assign({},body,{loc:ph.loc||null})}
     let r=null;
     try{const res=await fetch(API,{method:'POST',body:'HUB\n'+JSON.stringify(Object.assign({s:P.shiftKey},body))});r=await res.json()}catch(e){r=null}
     if(r&&(r.ok||r.stop)){
       await DB.del('out',it.n);wait=0;
       if(!r.ok)problem=r.message||'Something could not be sent. Text your TLE coordinator.';
-      if(r.ok&&ph){ph.sent=true;await DB.put('photos',ph)}
+      if(r.ok&&ph&&(await DB.all('photos')).some(x=>x.id===ph.id)){ph.sent=true;await DB.put('photos',ph)}
       if(r.ok&&body.kind==='report'){S.reportOk=new Date().toISOString();save();const c=cur();if(c&&c.id==='send')render()}
       continue}
     wait=Math.min(wait?wait*2:5000,60000);break;
@@ -331,7 +337,9 @@ document.addEventListener('click',e=>{
   if(d.view){const[s,i]=d.view.split(':');viewing[s]=viewing[s]===+i?undefined:+i;drawSlot(s)}
   if(d.close){delete viewing[d.close];drawSlot(d.close)}
   if(d.rm){const[s,i]=d.rm.split(':');const gone=photos[s].splice(+i,1)[0];delete viewing[s];drawSlot(s);refresh();
-    if(gone&&gone.id)DB.all('photos').then(all=>{const r=all.find(x=>x.id===gone.id);DB.del('photos',gone.id);if(r&&r.sent)enqueue({kind:'remove',id:gone.id})})}
+    if(gone&&gone.id)Promise.all([DB.all('photos'),DB.all('out')]).then(([all,out])=>{const r=all.find(x=>x.id===gone.id);DB.del('photos',gone.id);
+      out.filter(x=>x.body&&x.body.kind==='photo'&&x.body.id===gone.id).forEach(x=>DB.del('out',x.n));
+      if(r&&r.sent)enqueue({kind:'remove',id:gone.id})})}
 });
 
 /* a kept photo: made smaller, kept on the phone, located, then sent */
@@ -339,10 +347,12 @@ async function keepPhoto(s){
   const p=pending[s];delete pending[s];if(!p)return;
   p.id=uid();photos[s].push(p);drawSlot(s);refresh();locating++;
   let blob=p.file;try{blob=await shrink(p.file)}catch(e){}
-  const rec={id:p.id,k:P.key,slot:s,t:p.t.toISOString(),blob,loc:undefined,sent:false};
+  const data=await dataUrl(blob);
+  const rec={id:p.id,k:P.key,slot:s,t:p.t.toISOString(),data,loc:undefined,sent:false};
   await DB.put('photos',rec);
-  locate(async l=>{p.loc=l;rec.loc=l;drawSlot(s);await DB.put('photos',rec);locating--;
-    if(COLLECT)enqueue({kind:'photo',id:p.id,slot:s,title:SLOTS[s].title,n:photos[s].indexOf(p)+1,at:stamp(p.t),clock:clock(p.t)})});
+  locate(async l=>{p.loc=l;rec.loc=l;drawSlot(s);await DB.put('photos',rec);
+    if(COLLECT&&photos[s].indexOf(p)>-1)await enqueue({kind:'photo',id:p.id,slot:s,title:SLOTS[s].title,n:photos[s].indexOf(p)+1,at:stamp(p.t),clock:clock(p.t),loc:l||null,data});
+    locating--});
 }
 /* the report: everything the steps collected, labelled, so TLE can read it as it is */
 function sendReport(){
@@ -361,7 +371,7 @@ function sendReport(){
 S.cur='';
 /* photos kept on this phone come back when the page is opened again */
 DB.all('photos').then(all=>{all.filter(r=>r.k===P.key&&photos[r.slot]).sort((a,b)=>a.t<b.t?-1:1).forEach(r=>{
-  photos[r.slot].push({id:r.id,u:URL.createObjectURL(r.blob),t:new Date(r.t),loc:r.loc===undefined?null:r.loc})});
+  const u=r.data||(r.blob?URL.createObjectURL(r.blob):'');if(u)photos[r.slot].push({id:r.id,u,t:new Date(r.t),loc:r.loc===undefined?null:r.loc})});
   if(all.some(r=>r.k===P.key))render()}).finally(()=>{showSync();pump()});
 render();
 })();
